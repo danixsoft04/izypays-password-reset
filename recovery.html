@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d6efd">
+<title>Reset your IzyPays password</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+:root{--primary:#0d6efd;--dark:#102a43}
+body{min-height:100vh;margin:0;background:linear-gradient(135deg,#f2f7ff,#f8fafc);font-family:Arial,Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px}
+.card-reset{width:100%;max-width:480px;background:#fff;border:1px solid #e5eaf2;border-radius:22px;padding:clamp(24px,5vw,40px);box-shadow:0 18px 60px rgba(16,42,67,.12)}
+.brand-icon{width:60px;height:60px;border-radius:18px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;margin-bottom:22px}
+.form-control{border-radius:10px}.btn{border-radius:10px}
+#resetForm[hidden],#invalidState[hidden],#successState[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main class="card-reset">
+  <div class="brand-icon">i</div>
+  <div class="small text-primary fw-bold mb-2">IZYPAYS ACCOUNT SECURITY</div>
+  <h1 class="h3 fw-bold mb-2">Choose a new password</h1>
+  <p class="text-secondary mb-4">Enter your new password below. After it is saved, return to IzyPays and sign in with the new password.</p>
+  <div id="statusMessage" aria-live="polite"></div>
+  <form id="resetForm" hidden>
+    <div class="mb-3">
+      <label for="newPassword" class="form-label fw-semibold">New password</label>
+      <input id="newPassword" class="form-control form-control-lg" type="password" minlength="8" autocomplete="new-password" required>
+      <div class="form-text">Use at least 8 characters.</div>
+    </div>
+    <div class="mb-4">
+      <label for="confirmPassword" class="form-label fw-semibold">Confirm new password</label>
+      <input id="confirmPassword" class="form-control form-control-lg" type="password" minlength="8" autocomplete="new-password" required>
+    </div>
+    <button id="saveButton" class="btn btn-primary btn-lg w-100 fw-bold" type="submit">Save new password</button>
+  </form>
+  <div id="invalidState" hidden>
+    <p class="text-secondary">For your security, this page needs a valid recovery link from the latest IzyPays password-reset email.</p>
+    <a class="btn btn-primary w-100" href="https://danixsoft04.github.io/izypays/">Return to IzyPays</a>
+  </div>
+  <div id="successState" hidden>
+    <div class="alert alert-success"><i class="bi bi-check-circle-fill me-1"></i>Your password has been changed successfully.</div>
+    <a class="btn btn-primary btn-lg w-100 fw-bold" href="https://danixsoft04.github.io/izypays/">Continue to IzyPays login</a>
+  </div>
+  <div class="text-center mt-4">
+    <a href="https://danixsoft04.github.io/izypays/" class="link-secondary small">Return to IzyPays</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  const SUPABASE_URL = "https://zinsqzbvmcituelawhqf.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WEP8NmIGFvzsg5ex9lwg_w_520Fx5-e";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const form = document.getElementById("resetForm");
+  const status = document.getElementById("statusMessage");
+  const invalid = document.getElementById("invalidState");
+  const success = document.getElementById("successState");
+  const saveButton = document.getElementById("saveButton");
+
+  function message(type, text){
+    const cls = type === "error" ? "alert-danger" : type === "success" ? "alert-success" : "alert-info";
+    status.innerHTML = '<div class="alert '+cls+'" role="status"></div>';
+    status.firstElementChild.textContent = text;
+  }
+  function hasRecoveryMarker(){
+    const hash = new URLSearchParams((window.location.hash || "").replace(/^#/,""));
+    const query = new URLSearchParams(window.location.search || "");
+    return hash.get("type") === "recovery" ||
+      query.get("type") === "recovery" ||
+      hash.has("access_token") ||
+      query.has("code") ||
+      query.has("token_hash");
+  }
+  function showForm(){
+    invalid.hidden = true;
+    form.hidden = false;
+    document.getElementById("newPassword").focus();
+  }
+  function showInvalid(text){
+    form.hidden = true;
+    invalid.hidden = false;
+    message("error", text);
+  }
+
+  // Supabase JS consumes the recovery token/code from the URL and establishes a recovery session.
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if(event === "PASSWORD_RECOVERY" && session){
+      showForm();
+      message("info", "Recovery link verified. Choose your new password below.");
+    }
+  });
+
+  if(hasRecoveryMarker()){
+    showForm();
+    message("info", "Checking your secure recovery link. If it has expired, request a new password-reset email.");
+  } else {
+    showInvalid("This page was opened without a password-reset link. Please request a new reset email from IzyPays.");
+  }
+
+  form.addEventListener("submit", async function(event){
+    event.preventDefault();
+    const password = document.getElementById("newPassword").value;
+    const confirm = document.getElementById("confirmPassword").value;
+    if(password.length < 8){ message("error", "Your password must contain at least 8 characters."); return; }
+    if(password !== confirm){ message("error", "The passwords do not match. Please enter them again."); return; }
+
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving password...";
+    try{
+      const {data:sessionData,error:sessionError} = await supabaseClient.auth.getSession();
+      if(sessionError) throw sessionError;
+      if(!sessionData || !sessionData.session){
+        throw new Error("This recovery link is invalid or has expired. Return to IzyPays and request a new reset email.");
+      }
+      const {error} = await supabaseClient.auth.updateUser({password:password});
+      if(error) throw error;
+
+      form.hidden = true;
+      invalid.hidden = true;
+      success.hidden = false;
+      status.textContent = "";
+      try{ await supabaseClient.auth.signOut(); }catch(signOutError){ console.warn("Password changed; could not clear recovery session:",signOutError); }
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }catch(error){
+      console.error("IzyPays password reset failed:",error);
+      message("error", error && error.message ? error.message : "We could not update the password. Please request a new reset email.");
+    }finally{
+      saveButton.disabled = false;
+      saveButton.textContent = "Save new password";
+    }
+  });
+})();
+</script>
+</body>
+</html>
